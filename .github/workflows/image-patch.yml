@@ -1,0 +1,62 @@
+name: Container Image Patch in Docker hub example
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Set version tag for patched images
+      environment:
+        description: env
+        default: dev
+        type: choice
+        options:
+          - dev
+          - stage
+jobs:
+ parser:
+  runs-on: ubuntu-latest
+  outputs:
+    matrix: ${{ steps.set-matrix.outputs.matrix }}
+  steps:
+    - uses: actions/checkout@v3
+    - id: set-matrix
+      run: |
+        images=$(echo $(cat ./images/images.json | jq '.[] | [{name: .name, container: .container, namespace: .namespace, repo: .repo, patch_command: .patch_command, release_tag: .release_tag[]}]' | jq -s add))
+        echo $images
+        echo "::set-output name=matrix::$images"
+ build-patch:
+    name: build patch
+    needs: [ parser ]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg: ${{ fromJson(needs.parser.outputs.matrix) }}
+    steps:
+      - name: Pre clean runner
+        run: |
+          docker rmi ecureuil357/${{ matrix.cfg.repo }}:${{ inputs.version }} || true
+      - uses: actions/checkout@v3
+      - name: docker login
+        env:
+          DOCKER_USER: ${{ secrets.DOCKER_USER }}   
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}  
+        run: |
+          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USER --password-stdin
+      - name: docker build ${{ matrix.cfg.name }} image
+        run: |
+          docker images
+          docker build -t ecureuil357/${{ matrix.cfg.repo }}:${{ inputs.version }} \
+            --build-arg BASE=${{ matrix.cfg.container }}/${{ matrix.cfg.repo }}:${{ matrix.cfg.release_tag }} \
+            --build-arg PATCH_COMMAND="${{ matrix.cfg.patch_command }}; ls" \
+            -f images/Dockerfile ./images
+          docker images
+      - name: docker push
+        run: |
+          echo "images: ${{ matrix.cfg.name }}"
+          echo "Patch command: ${{ matrix.cfg.patch_command }}"
+          docker push ecureuil357/${{ matrix.cfg.repo }}:${{ inputs.version }}
+      - name: Clean up
+        id: cleanup
+        run: |
+          docker rmi ecureuil357/${{ matrix.cfg.repo }}:${{ inputs.version }}
+          docker rmi ${{ matrix.cfg.namespace }}/${{ matrix.cfg.repo }}:${{ matrix.cfg.release_tag }}

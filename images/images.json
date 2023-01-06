@@ -1,0 +1,18 @@
+[
+	{
+		"name": "microdnf",
+		"container": "redhat",
+		"namespace": "redhat",
+		"repo": "ubi8-minimal",
+		"release_tag": ["8.7", "8.6", "8.5"],
+		"patch_command": "microdnf update"
+	},
+	{
+		"name": "yum",
+		"container": "redhat",
+		"namespace": "redhat",
+		"repo": "ubi8",
+		"release_tag": ["8.4", "8.3", "8.2"],
+		"patch_command": "yum update"
+	}
+]
